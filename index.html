@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GKM ENTERPRISE - Invoice Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #2A5C84;
+            --secondary-color: #5CB85C;
+            --accent-color: #FFC107;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 15px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            color: var(--primary-color);
+            font-size: 1.8em;
+            margin: 0;
+            text-transform: uppercase;
+        }
+
+        .details-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .details-section input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        .input-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        input, button {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        /* Hide spin buttons for number inputs */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        input[type="number"] {
+            -moz-appearance: textfield; /* Firefox */
+        }
+
+        button {
+            background: var(--secondary-color);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #449d44;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            overflow-x: auto;
+            display: block;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        /* Make numeric values bold */
+        td:nth-child(2),
+        td:nth-child(3),
+        td:nth-child(4),
+        #subtotal,
+        #balance,
+        #grandTotal {
+            font-weight: bold;
+        }
+
+        .total-section {
+            margin-top: 15px;
+            text-align: right;
+            font-size: 1.1em;
+        }
+
+        .total-section p {
+            margin: 10px 0; /* Add space between lines */
+        }
+
+        .grand-total {
+            font-weight: bold; /* Make Grand Total bold */
+            font-size: 1.2em; /* Slightly larger font */
+            margin-top: 15px; /* Add extra space above Grand Total */
+        }
+
+        .remaining-balance {
+            margin: 15px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .download-btn {
+            background: var(--accent-color);
+            padding: 12px 25px;
+            font-size: 1em;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>GKM ENTERPRISE</h1>
+            <p>Invoice Generator</p>
+        </div>
+
+        <!-- Details Section -->
+        <div class="details-section">
+            <input type="date" id="invoiceDate" placeholder="Date">
+            <input type="text" id="fromName" placeholder="From Name" value="Khiladi Mallah">
+        </div>
+        <div class="details-section">
+            <input type="text" id="contact" placeholder="Contact" value="9324240925">
+            <input type="text" id="toWhom" placeholder="To Whom (Client Name)">
+        </div>
+
+        <!-- Item Input Section -->
+        <div class="input-section">
+            <input type="text" id="itemName" placeholder="Item Name">
+            <input type="number" id="qty" placeholder="Qty (kgs)" step="0.1">
+            <input type="number" id="price" placeholder="Price per kg">
+            <button onclick="addItem()">Add Item</button>
+        </div>
+
+        <!-- Invoice Table -->
+        <table id="invoiceTable">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Qty (kgs)</th>
+                    <th>Price/kg</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody id="invoiceBody">
+            </tbody>
+        </table>
+
+        <!-- Remaining Balance Section -->
+        <div class="remaining-balance">
+            <input type="number" id="remainingBalance" placeholder="Remaining Balance">
+            <button onclick="updateBalance()">Update Balance</button>
+        </div>
+
+        <!-- Totals Section -->
+        <div class="total-section">
+            <p>Subtotal: <span id="subtotal">0</span></p>
+            <p>Pending Balance: <span id="balance">0</span></p>
+            <p class="grand-total">Grand Total: <span id="grandTotal">0</span></p>
+        </div>
+
+        <!-- Download Button -->
+        <div class="text-center">
+            <button class="download-btn" onclick="generatePDF()">Download Invoice PDF</button>
+        </div>
+    </div>
+
+    <script>
+        // Initialize jsPDF
+        const { jsPDF } = window.jspdf;
+
+        let items = [];
+        let balance = 0;
+
+        function addItem() {
+            const itemName = document.getElementById('itemName').value;
+            const qty = parseFloat(document.getElementById('qty').value);
+            const price = parseFloat(document.getElementById('price').value);
+
+            if (!itemName || isNaN(qty) || isNaN(price)) return;
+
+            const total = qty * price;
+            items.push({ itemName, qty, price, total });
+            
+            updateInvoice();
+            clearInputs();
+        }
+
+        function updateBalance() {
+            balance = parseFloat(document.getElementById('remainingBalance').value) || 0;
+            updateTotals();
+        }
+
+        function updateInvoice() {
+            const tbody = document.getElementById('invoiceBody');
+            tbody.innerHTML = items.map((item, index) => `
+                <tr>
+                    <td>${item.itemName}</td>
+                    <td>${item.qty}</td>
+                    <td>${item.price}</td>
+                    <td>${item.total.toFixed(2)}</td>
+                </tr>
+            `).join('');
+            
+            updateTotals();
+        }
+
+        function updateTotals() {
+            const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+            document.getElementById('subtotal').textContent = subtotal.toFixed(2);
+            document.getElementById('balance').textContent = balance.toFixed(2);
+            document.getElementById('grandTotal').textContent = (subtotal + balance).toFixed(2);
+        }
+
+        function clearInputs() {
+            document.getElementById('itemName').value = '';
+            document.getElementById('qty').value = '';
+            document.getElementById('price').value = '';
+        }
+
+        function generatePDF() {
+            const doc = new jsPDF();
+
+            // Add header
+            doc.setFontSize(22);
+            doc.setTextColor(42, 92, 132);
+            doc.text('GKM ENTERPRISE', 15, 20);
+            doc.setFontSize(12);
+            doc.setTextColor(0, 0, 0);
+            doc.text('Invoice', 15, 30);
+
+            // Add details
+            const invoiceDate = document.getElementById('invoiceDate').value;
+            const fromName = document.getElementById('fromName').value;
+            const contact = document.getElementById('contact').value;
+            const toWhom = document.getElementById('toWhom').value;
+
+            doc.setFontSize(10);
+            doc.text(`Date: ${invoiceDate}`, 15, 40);
+            doc.text(`From: ${fromName}`, 15, 45);
+            doc.text(`Contact: ${contact}`, 15, 50);
+            doc.text(`To: ${toWhom}`, 15, 55);
+
+            // Add items table
+            const columns = ["Item", "Qty (kgs)", "Price/kg", "Total"];
+            const rows = items.map(item => [
+                item.itemName,
+                item.qty,
+                item.price,
+                item.total.toFixed(2)
+            ]);
+
+            doc.autoTable({
+                head: [columns],
+                body: rows,
+                startY: 60,
+                theme: 'striped',
+                styles: { halign: 'center' },
+                headStyles: { fillColor: [42, 92, 132] }
+            });
+
+            // Add totals
+            const finalY = doc.lastAutoTable.finalY + 10;
+            doc.setFontSize(10);
+            doc.text(`Subtotal: ${document.getElementById('subtotal').textContent}`, 15, finalY);
+            doc.text(`Pending Balance: ${balance.toFixed(2)}`, 15, finalY + 5);
+
+            // Make Grand Total bold
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'bold'); // Set font to bold
+            doc.text(`Grand Total: ${document.getElementById('grandTotal').textContent}`, 15, finalY + 10);
+
+            // Save PDF
+            doc.save(`GKM_Invoice_${Date.now()}.pdf`);
+        }
+    </script>
+</body>
+</html>
